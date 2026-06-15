@@ -1,0 +1,55 @@
+
+name: Gold Price Monitor
+
+on:
+  schedule:
+    - cron: '*/5 5-17 * * 1-5'
+    - cron: '0 7,16 * * 6,0'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gold-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python packages
+        run: pip install playwright requests
+
+      - name: Cache Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-chromium-v1
+
+      - name: Install Playwright Chromium
+        run: playwright install chromium --with-deps
+
+      - name: Run Gold Monitor
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python gold_monitor_action.py
+
+      - name: Commit updated prices
+        run: |
+          git config user.name "Gold Bot"
+          git config user.email "action@github.com"
+          git add gold_prices.json
+          git diff --staged --quiet || (git commit -m "update prices" && git push)
